@@ -1,1 +1,10 @@
 __pycache__/
+codex/
+.ruff_cache/
+.pytest_cache/
+.venv/
+.gitignore
+node_modules/
+cli-logs/*.log
+.env
+notes.md
