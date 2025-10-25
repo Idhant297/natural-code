@@ -60,12 +60,12 @@ def read_natural_code_file(filepath):
     match = re.search(r"\.n(\w+)$", filepath)
     if not match:
         print(
-            f"Error: File must have .n<language> extension (e.g., .npy, .njava, .njs)",
+            "Error: File must have .n<language> extension (e.g., .npy, .njava, .njs)",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    language = match.group(1)
+    # Language extracted but not currently used
 
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -114,7 +114,7 @@ def run_codex(
         log_handle = open(log_file, "w", encoding="utf-8")
 
         # Write header to log file
-        log_handle.write(f"=== Codex Execution Log ===\n")
+        log_handle.write("=== Codex Execution Log ===\n")
         log_handle.write(f"Timestamp: {datetime.now().isoformat()}\n")
         log_handle.write(
             f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n"
@@ -229,7 +229,7 @@ def main():
         # Open log file for writing
         with open(log_file, "w", encoding="utf-8") as log_handle:
             # Write header to log file
-            log_handle.write(f"=== Codex Execution Log ===\n")
+            log_handle.write("=== Codex Execution Log ===\n")
             log_handle.write(f"Timestamp: {datetime.now().isoformat()}\n")
             log_handle.write(f"Prompt file: {prompt_file}\n")
             if system_prompt:

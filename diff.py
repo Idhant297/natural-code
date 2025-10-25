@@ -1,6 +1,7 @@
 import sys
 import json
 import hashlib
+import fnmatch
 from pathlib import Path
 
 
@@ -20,20 +21,75 @@ def get_content(path):
         return ""
 
 
+def load_gitignore_patterns(folder):
+    """Load patterns from .gitignore file"""
+    gitignore_path = Path(folder) / ".gitignore"
+    patterns = []
+
+    if gitignore_path.exists():
+        try:
+            with open(gitignore_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith("#"):
+                        patterns.append(line)
+        except Exception:
+            pass
+
+    return patterns
+
+
+def is_ignored(file_path, patterns):
+    """Check if a file path matches any gitignore pattern"""
+    file_path_str = str(file_path)
+
+    for pattern in patterns:
+        # Handle directory patterns (ending with /)
+        if pattern.endswith("/"):
+            if file_path_str.startswith(pattern) or ("/" + pattern) in file_path_str:
+                return True
+        # Handle negation patterns (starting with !)
+        elif pattern.startswith("!"):
+            # This is a negation pattern - would need more complex logic
+            # For now, we'll skip negation patterns
+            continue
+        # Handle glob patterns
+        else:
+            if fnmatch.fnmatch(file_path_str, pattern) or fnmatch.fnmatch(
+                file_path_str, "*/" + pattern
+            ):
+                return True
+            # Also check if any parent directory matches
+            parts = file_path_str.split("/")
+            for i in range(len(parts)):
+                partial_path = "/".join(parts[: i + 1])
+                if fnmatch.fnmatch(partial_path, pattern):
+                    return True
+
+    return False
+
+
 def scan(folder):
     folder = Path(folder)
     files = {}
+    gitignore_patterns = load_gitignore_patterns(folder)
+
     for f in folder.rglob("*"):
         if (
             f.is_file()
             and not f.name.startswith(".DS_Store")
             and ".git" not in str(f)
-            and f.name != ".folder_state.json"
+            and f.name != ".state.json"
         ):
-            files[str(f.relative_to(folder))] = {
-                "hash": get_hash(f),
-                "content": get_content(f),
-            }
+            relative_path = f.relative_to(folder)
+
+            # Check if file should be ignored based on gitignore patterns
+            if not is_ignored(relative_path, gitignore_patterns):
+                files[str(relative_path)] = {
+                    "hash": get_hash(f),
+                    "content": get_content(f),
+                }
     return files
 
 
@@ -92,7 +148,7 @@ def main():
     args = [arg for arg in sys.argv[1:] if not arg.startswith("-")]
     flags = [arg for arg in sys.argv[1:] if arg.startswith("-")]
     folder = args[0] if args else "."
-    statefile = ".folder_state.json"
+    statefile = ".state.json"
     show_content = "--content" in flags or "-c" in flags
 
     curr = scan(folder)
