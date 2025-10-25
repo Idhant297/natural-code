@@ -8,3 +8,4 @@ node_modules/
 cli-logs/*.log
 .env
 notes.md
+*.json
