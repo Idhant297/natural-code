@@ -191,7 +191,7 @@ def run_codex(
             tee_thread = threading.Thread(target=tee_output, daemon=True)
             tee_thread.start()
 
-        print(f"Codex process started (PID: {process.pid})")
+        print(f"process started (PID: {process.pid})")
         print(f"Log file: {log_file}")
         return process.pid
 
