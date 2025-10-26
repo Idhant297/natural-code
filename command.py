@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Terminal Command Generator using Groq API
-Generates the appropriate terminal command to run transpiled code
+Generates the terminal command to run the transpiled code
 """
 
 import os
@@ -10,22 +10,22 @@ from groq import Groq
 from dotenv import load_dotenv
 
 
-def generate_run_command(changes_summary):
+def generate_run_command(file_path, changes_summary):
     """
     Generate terminal command to run the transpiled code using Groq inference.
 
     Args:
-        changes_summary: String containing diff/changes summary from diff.py
+        file_path: Original .n<lang> file path (e.g., "hello.npy")
+        changes_summary: Git diff summary showing what files were created/modified
 
     Returns:
         dict: {
             "success": bool,
-            "command": str,         # The terminal command to run
-            "explanation": str,     # Brief explanation
-            "error": str           # Error message if failed
+            "command": str,
+            "error": str
         }
     """
-    # Load environment variables
+    # Load environment and get API key
     load_dotenv()
     api_key = os.getenv("GROQ_API")
 
@@ -33,39 +33,68 @@ def generate_run_command(changes_summary):
         return {
             "success": False,
             "command": None,
-            "explanation": None,
             "error": "GROQ_API key not found in .env",
         }
 
-    # Extract files from changes summary
-    files = _extract_files_from_changes(changes_summary)
+    # Build prompt for Groq
+    prompt = f"""Generate the terminal command to run the transpiled code.
 
-    if not files:
-        return {
-            "success": False,
-            "command": None,
-            "explanation": None,
-            "error": "No executable files found in changes",
-        }
+Original file: {file_path}
+(e.g., if original is "hello.npy", the transpiled file will be "hello.py")
 
-    # Build the prompt for Groq
-    prompt = _build_prompt(changes_summary, files)
+Changes made by the transpiler:
+{changes_summary[:600]}
 
-    try:
-        # Initialize Groq client
-        client = Groq(api_key=api_key)
+Your task: Generate the exact terminal command to run the main transpiled file.
 
-        # Call Groq API for inference
-        response = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are a terminal command expert. Generate ONLY the exact command needed to run code files. Return just the command, nothing else - no explanations, no markdown, no extra text.
-in the format of:
+Examples:
+- If original: hello.npy → command: python hello.py
+- If original: server.njs → command: node server.js
+- If original: app.ngo → command: go run app.go
+- If original: main.nts → command: tsx main.ts
+
+Return ONLY the terminal command in this format:
 ```bash
 <command>
-```""",
-                },
+```
+"""
+
+    try:
+        # Call Groq API
+        client = Groq(api_key=api_key)
+
+        system_prompt = """You are a terminal command expert for a natural code transpiler system.
+
+The system works like this:
+- Users write code in .n<language> files (e.g., .npy for Python, .njs for JavaScript)
+- The transpiler converts these to actual runnable code files
+- Your job: Generate the EXACT terminal command to run the transpiled file
+
+Rules:
+1. The transpiled file name = original filename with 'n' removed from extension
+   - hello.npy → hello.py → command: python hello.py
+   - server.njs → server.js → command: node server.js
+   - app.njava → app.java → command: java app (for Java, no extension)
+
+2. Use the appropriate runtime/interpreter:
+   - .py → python or python3
+   - .js → node
+   - .java → java (without .java extension)
+   - .go → go run
+   - .ts/.tsx → tsx or ts-node
+   - .rb → ruby
+   - .php → php
+
+3. Return ONLY the command in this format:
+   ```bash
+   <command>
+   ```
+
+Do NOT add explanations, do NOT add extra text. ONLY the command in a bash code block."""
+
+        response = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
             model="llama-3.3-70b-versatile",
@@ -73,201 +102,39 @@ in the format of:
             max_tokens=100,
         )
 
-        # Extract command from response
-        command = response.choices[0].message.content.strip()
-
-        # Clean the command
-        command = _clean_command(command)
+        # Parse command from response
+        raw_output = response.choices[0].message.content.strip()
+        command = parse_bash_block(raw_output)
 
         if not command:
             return {
                 "success": False,
                 "command": None,
-                "explanation": None,
                 "error": "Empty command generated",
             }
 
-        # Generate explanation
-        explanation = _explain_command(command, files)
-
-        return {
-            "success": True,
-            "command": command,
-            "explanation": explanation,
-            "error": None,
-        }
+        return {"success": True, "command": command, "error": None}
 
     except Exception as e:
-        return {
-            "success": False,
-            "command": None,
-            "explanation": None,
-            "error": f"Groq API error: {str(e)}",
-        }
+        return {"success": False, "command": None, "error": f"Groq API error: {str(e)}"}
 
 
-def _extract_files_from_changes(changes_summary):
+def parse_bash_block(raw_output):
     """
-    Extract executable file names from the changes summary.
-    Returns list of files sorted by priority (Python > JS > Java > Go > etc.)
+    Parse command from Groq output in format:
+    ```bash
+    <command>
+    ```
     """
-    files = []
+    # Extract content between ```bash and ```
+    match = re.search(r"```bash\s*\n(.+?)\n```", raw_output, re.DOTALL)
+    if match:
+        return match.group(1).strip().split("\n")[0].strip()
 
-    # Parse changes summary
-    lines = changes_summary.split("\n")
+    # Fallback: try generic code block
+    match = re.search(r"```\s*\n(.+?)\n```", raw_output, re.DOTALL)
+    if match:
+        return match.group(1).strip().split("\n")[0].strip()
 
-    for line in lines:
-        line = line.strip()
-        # Look for added or modified files (+ or ~)
-        if line.startswith("+ ") or line.startswith("~ "):
-            filename = line[2:].strip()
-            if _is_runnable_file(filename):
-                files.append(filename)
-
-    # Also check for "File: " patterns in diff output
-    if not files:
-        file_pattern = re.compile(r"^File: (.+)$", re.MULTILINE)
-        matches = file_pattern.findall(changes_summary)
-        for match in matches:
-            if _is_runnable_file(match.strip()):
-                files.append(match.strip())
-
-    # Sort by priority
-    return _prioritize_files(files)
-
-
-def _is_runnable_file(filename):
-    """Check if file is a runnable code file"""
-    runnable_extensions = [
-        ".py",
-        ".js",
-        ".java",
-        ".go",
-        ".ts",
-        ".tsx",
-        ".jsx",
-        ".rb",
-        ".php",
-        ".rs",
-        ".c",
-        ".cpp",
-        ".sh",
-        ".bash",
-    ]
-    return any(filename.endswith(ext) for ext in runnable_extensions)
-
-
-def _prioritize_files(files):
-    """Sort files by language priority"""
-    priority = {
-        ".py": 1,
-        ".js": 2,
-        ".java": 3,
-        ".go": 4,
-        ".ts": 5,
-        ".tsx": 6,
-    }
-
-    def get_priority(f):
-        for ext, p in priority.items():
-            if f.endswith(ext):
-                return p
-        return 99
-
-    return sorted(files, key=get_priority)
-
-
-def _build_prompt(changes_summary, files):
-    """Build the Groq prompt for command generation"""
-
-    main_file = files[0] if files else "file"
-    files_str = ", ".join(files[:3])  # Show max 3 files
-
-    prompt = f"""Generate the terminal command to run this code.
-
-Files: {files_str}
-Primary file: {main_file}
-
-Changes summary:
-{changes_summary[:400]}
-
-Return ONLY the command. Examples:
-- For .py: python {main_file}
-- For .js: node {main_file}
-- For .java: java {os.path.splitext(main_file)[0]}
-- For .go: go run {main_file}
-- For .ts/.tsx: tsx {main_file}
-
-Command:"""
-
-    return prompt
-
-
-def _clean_command(command):
-    """Clean up the generated command"""
-    # Remove markdown code blocks
-    command = re.sub(r"^```(?:bash|sh|shell|python|javascript)?\s*", "", command)
-    command = re.sub(r"\s*```$", "", command)
-
-    # Remove quotes if present
-    command = command.strip("\"'")
-
-    # Take first line only
-    command = command.split("\n")[0].strip()
-
-    # Remove any extra whitespace
-    command = " ".join(command.split())
-
-    return command
-
-
-def _explain_command(command, files):
-    """Generate brief explanation of the command"""
-    main_file = files[0] if files else ""
-
-    if command.startswith("python"):
-        return f"Run Python: {main_file}"
-    elif command.startswith("node"):
-        return f"Run JavaScript: {main_file}"
-    elif command.startswith("java "):
-        return f"Run Java: {main_file}"
-    elif command.startswith("go run"):
-        return f"Run Go: {main_file}"
-    elif command.startswith("tsx") or command.startswith("ts-node"):
-        return f"Run TypeScript: {main_file}"
-    else:
-        return f"Execute: {main_file}"
-
-
-# Test function
-if __name__ == "__main__":
-    # Test with sample changes
-    test_changes = """Changes:
-+ test_hello.py
-~ main.py
-
-NEW FILES:
-  + test_hello.py
-
-Modified files:
-
-File: test_hello.py
-----------------------------------------------------------------------
-```diff
-+    1  def hello():
-+    2      print("Hello, World!")
-+    3
-+    4  if __name__ == "__main__":
-+    5      hello()
-```
-"""
-
-    print("Testing command generation...")
-    result = generate_run_command(test_changes)
-
-    if result["success"]:
-        print(" Success!")
-        print(f"  Command: {result['command']}")
-        print(f"  Explanation: {result['explanation']}")
-    else:
-        print(f" Failed: {result['error']}")
+    # Fallback: use raw output first line
+    return raw_output.strip().split("\n")[0].strip()

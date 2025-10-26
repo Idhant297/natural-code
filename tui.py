@@ -9,12 +9,14 @@ import os
 import time
 import threading
 import random
+import subprocess
 from pathlib import Path
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
 import cli
 import diff
+import command
 
 # Collection of fun ASCII animation styles - one is picked randomly per session
 ANIMATION_STYLES = {
@@ -200,33 +202,6 @@ class NaturalCodeRunner:
         self.error = error_message
         self.animation_running = False
 
-    def spacer_terminal_command(self, command):
-        """
-        SPACER FUNCTION: Execute terminal command and return result
-
-        This is a placeholder for custom terminal command logic.
-        You can implement your own logic here later.
-
-        Args:
-            command: The command string to execute
-
-        Returns:
-            The result of the command execution
-        """
-        # TODO: Implement custom terminal command logic here
-        # For now, this is a placeholder that you can fill in later
-
-        # Let fun verbs continue showing while running
-        time.sleep(0.5)  # Simulated delay
-
-        # Placeholder implementation
-        # Replace this with your actual command execution logic
-        return {
-            "success": True,
-            "message": "Spacer function called - implement your logic here",
-            "command": command,
-        }
-
     def run_natural_code(self):
         """Run the natural code file through cli.py"""
         try:
@@ -284,7 +259,7 @@ class NaturalCodeRunner:
             time.sleep(0.5)
 
             # Run codex
-            pid = cli.run_codex(
+            cli.run_codex(
                 full_prompt,
                 tagged_file,
                 groq_api_key,
@@ -295,9 +270,6 @@ class NaturalCodeRunner:
             # Enable fun verbs mode - codex is now actively generating code!
             self.use_fun_verbs = True
             time.sleep(4.0)  # Let fun verbs rotate for a bit
-
-            # Call spacer function for terminal command
-            _result = self.spacer_terminal_command(f"codex process {pid}")
 
             # Continue showing fun verbs a bit longer
             time.sleep(2.0)
@@ -310,20 +282,53 @@ class NaturalCodeRunner:
             # Get file changes using diff.py
             changes_summary = diff.main(folder=".", print_output=False)
 
+            # Generate terminal command using Groq
+            self.update_status("Generating run command...")
+            time.sleep(0.3)
+            command_result = command.generate_run_command(
+                self.filename, changes_summary
+            )
+
+            # Execute the generated command if successful
+            command_output = None
+            if command_result["success"]:
+                self.update_status("Running generated command...")
+                time.sleep(0.3)
+                try:
+                    # Execute the command
+                    result = subprocess.run(
+                        command_result["command"],
+                        shell=True,
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    command_output = {
+                        "stdout": result.stdout,
+                        "stderr": result.stderr,
+                        "returncode": result.returncode,
+                    }
+                except subprocess.TimeoutExpired:
+                    command_output = {"error": "Command execution timeout (30s)"}
+                except Exception as e:
+                    command_output = {"error": f"Execution error: {str(e)}"}
+
             self.update_status(f"Complete! Check log: {log_file.name}")
             time.sleep(1.0)
 
-            return True, changes_summary
+            return True, changes_summary, command_result, command_output
 
         except Exception as e:
             self.set_error(f"Error: {str(e)}")
-            return False, None
+            return False, None, None, None
 
     def run(self):
         """Main run method with live display"""
         execution_thread = None
         success = False
         changes_summary = None
+        command_result = None
+        command_output = None
 
         try:
             with Live(
@@ -334,8 +339,10 @@ class NaturalCodeRunner:
             ) as live:
                 # Start execution in background thread
                 def execute():
-                    nonlocal success, changes_summary
-                    success, changes_summary = self.run_natural_code()
+                    nonlocal success, changes_summary, command_result, command_output
+                    success, changes_summary, command_result, command_output = (
+                        self.run_natural_code()
+                    )
                     self.animation_running = False
 
                 execution_thread = threading.Thread(target=execute, daemon=True)
@@ -367,6 +374,10 @@ class NaturalCodeRunner:
                 # Display file changes summary - single line with color coding
                 if changes_summary:
                     self._display_changes_summary(changes_summary)
+
+                # Display generated command
+                if command_result and command_result["success"]:
+                    self._display_command(command_result, command_output)
             else:
                 self.console.print("\n  ✗ Execution failed!", style="bold red")
                 if self.error:
@@ -442,6 +453,42 @@ class NaturalCodeRunner:
             self.console.print(display)
         else:
             self.console.print("  No changes\n", style="dim")
+
+    def _display_command(self, command_result, command_output):
+        """Display the generated command and its output"""
+        # Display the command
+        self.console.print("\n  → Generated command:", style="bold cyan")
+        self.console.print(f"    {command_result['command']}", style="green")
+
+        # Display command output if available
+        if command_output:
+            if "error" in command_output:
+                self.console.print(f"\n  ✗ {command_output['error']}", style="red")
+            else:
+                # Display stdout if present
+                if command_output.get("stdout"):
+                    self.console.print("\n  Output:", style="bold")
+                    for line in command_output["stdout"].strip().split("\n"):
+                        self.console.print(f"    {line}", style="dim")
+
+                # Display stderr if present
+                if command_output.get("stderr"):
+                    self.console.print("\n  Errors:", style="bold red")
+                    for line in command_output["stderr"].strip().split("\n"):
+                        self.console.print(f"    {line}", style="red")
+
+                # Display return code
+                returncode = command_output.get("returncode", 0)
+                if returncode == 0:
+                    self.console.print(
+                        "\n  ✓ Command completed successfully", style="green"
+                    )
+                else:
+                    self.console.print(
+                        f"\n  ✗ Command failed with exit code {returncode}", style="red"
+                    )
+
+        self.console.print("")
 
 
 def show_animated_logo():
