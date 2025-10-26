@@ -79,11 +79,13 @@ Rules:
 2. Use the appropriate runtime/interpreter:
    - .py → python or python3
    - .js → node
-   - .java → java (without .java extension)
+   - .java → javac <file_name>.java && java <file_name>
    - .go → go run
    - .ts/.tsx → tsx or ts-node
    - .rb → ruby
    - .php → php
+   
+   NOTE: the command should be self contained and should NOT any further steps to run the code.
 
 3. Return ONLY the command in this format:
    ```bash

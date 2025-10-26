@@ -40,7 +40,12 @@ def get_log_filepath(input_file):
 
 def load_env_file():
     """Load environment variables from .env file"""
-    env_path = Path(__file__).parent / ".env"
+    # Try current working directory first (where the user runs the command)
+    env_path = Path.cwd() / ".env"
+    if not env_path.exists():
+        # Fall back to script directory (for development mode)
+        env_path = Path(__file__).parent / ".env"
+
     if env_path.exists():
         load_dotenv(env_path)
     else:

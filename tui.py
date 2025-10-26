@@ -212,7 +212,7 @@ class NaturalCodeRunner:
             path = Path(self.filename)
             if not path.exists():
                 self.set_error(f"File not found: {self.filename}")
-                return False
+                return False, None, None, None
 
             # Check for .n<language> extension
             import re
@@ -222,7 +222,7 @@ class NaturalCodeRunner:
                 self.set_error(
                     "File must have .n<language> extension (e.g., .npy, .njs)"
                 )
-                return False
+                return False, None, None, None
 
             lang = match.group(1)
             self.update_status(f"Detected language: {lang}")
@@ -237,7 +237,7 @@ class NaturalCodeRunner:
             groq_api_key = os.getenv("GROQ_API")
             if not groq_api_key:
                 self.set_error("GROQ_API key not found in .env file")
-                return False
+                return False, None, None, None
 
             self.update_status("Analyzing changes...")
             time.sleep(0.3)
@@ -514,12 +514,12 @@ def show_animated_logo():
         console.clear()
         console.print("\n\n\n")
         console.print(f"        {frame}", style="bold cyan")
-        time.sleep(0.15)  # Slower animation
+        time.sleep(0.12)  # Slightly faster for better flow
 
     # Pause before showing big logo
-    time.sleep(0.3)
+    time.sleep(0.2)
 
-    # Show the big pixelated NRUN logo
+    # Show the big pixelated NRUN logo with tagline
     console.clear()
     console.print("")
     console.print("  ███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗", style="bold cyan")
@@ -528,6 +528,8 @@ def show_animated_logo():
     console.print("  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║", style="bold cyan")
     console.print("  ██║ ╚████║██║  ██║╚██████╔╝██║ ╚████║", style="bold cyan")
     console.print("  ╚═╝  ╚═══╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝", style="bold cyan")
+    console.print("")
+    console.print("  Write what you want. Get code that works.", style="dim italic")
     console.print("")
 
 
@@ -539,22 +541,41 @@ def main():
 
         # Show usage information
         console = Console()
-        console.print("v0.1.0")
+
+        # What is Natural Code?
+        console.print("  [bold cyan]Overview[/bold cyan]")
+        console.print(
+            "  Natural code transforms plain English descriptions into executable code."
+        )
+        console.print("  Write what you want. Get code that works.\n")
+
+        # Usage
+        console.print("  [bold cyan]Usage[/bold cyan]")
+        console.print("  nrun <filename>.n<lang>\n")
+
+        # Quick Start
+        console.print("  [bold cyan]Quick Start[/bold cyan]")
+        console.print("  1. Create file with .n<language> extension")
+        console.print("  2. Describe your program in plain English")
+        console.print("  3. Run with nrun\n")
+
+        # Example
+        console.print("  [bold cyan]Example[/bold cyan]")
+        console.print('  $ echo "Build a calculator with add and subtract" > calc.npy')
+        console.print("  $ nrun calc.npy\n")
+
+        # Supported Languages
+        console.print("  [bold cyan]Supported Extensions[/bold cyan]")
+        console.print("  .npy .njs .njava .ngo .nrs .nts\n")
+
+        # Setup
+        console.print("  [bold cyan]Setup[/bold cyan]")
+        console.print("  Set GROQ_API in your .env file\n")
+
+        # Footer
+        console.print("  ─────────────────────────────────────────────")
+        console.print("  v0.2.0 • github.com/idhant297/natural-code")
         console.print("")
-        console.print("  [bold]Usage:[/bold]")
-        console.print("    nrun <file.n<language>>\n")
-        console.print("  [bold]Examples:[/bold]")
-        console.print("    nrun hello.npy          Run a Python natural code file")
-        console.print("    nrun server.njs         Run a JavaScript natural code file")
-        console.print("    nrun app.njava          Run a Java natural code file\n")
-        console.print(
-            "  The file must have a .n<language> extension where <language> is the"
-        )
-        console.print("  target programming language (e.g., py, js, java, etc.)\n")
-        console.print(" ")
-        console.print(
-            "  github: [link=https://github.com/idhant297/natural-code]https://github.com/idhant297/natural-code[/link]"
-        )
         sys.exit(0)
 
     # Normal execution with file argument
