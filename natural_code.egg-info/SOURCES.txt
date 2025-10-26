@@ -1,0 +1,13 @@
+LICENSE
+README.md
+cli.py
+command.py
+diff.py
+pyproject.toml
+tui.py
+natural_code.egg-info/PKG-INFO
+natural_code.egg-info/SOURCES.txt
+natural_code.egg-info/dependency_links.txt
+natural_code.egg-info/entry_points.txt
+natural_code.egg-info/requires.txt
+natural_code.egg-info/top_level.txt

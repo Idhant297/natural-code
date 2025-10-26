@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "natural-code"
 version = "0.1.0"
@@ -7,7 +11,19 @@ requires-python = ">=3.13"
 dependencies = [
     "pathlib>=1.0.1",
     "python-dotenv>=1.1.1",
+    "rich>=12.4.0",
+    "rich-cli>=1.8.1",
+    "groq>=0.12.0",
 ]
+
+[project.scripts]
+nrun = "tui:main"
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+py-modules = ["tui", "cli", "diff", "command"]
 
 [dependency-groups]
 dev = [
