@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
+from diff import main as diff_main
 
 # Configuration: Set to False to hide codex output
 SHOW_CODEX_OUTPUT = True
@@ -75,6 +76,39 @@ def read_natural_code_file(filepath):
         sys.exit(1)
 
 
+def cli_prompt(tagged_file):
+    """
+    Collect and construct the full prompt for codex.
+
+    Args:
+        prompt_file: Path to the natural code file
+        additional_context: Optional additional context to include
+
+    Returns:
+        Fully formatted prompt string ready for codex
+    """
+    tagged_file = f"@{tagged_file}"
+
+    # Get diff output without printing to stdout
+    diff = diff_main(print_output=False)
+
+    # Handle case where diff_main returns None
+    if diff is None:
+        diff = "No diff information available"
+
+    # prompt = f"""{system_prompt}
+
+    prompt = f"""Main file that the user is intended to run:
+{tagged_file}
+
+Changes that user has made since the last run of the code:
+{diff}
+
+Now please create the desired code file (if not already created) for the user to run and other necessary ones OR update the existing code file to the desired state."""
+
+    return prompt
+
+
 def run_codex(
     prompt, prompt_file, groq_api_key, log_file, show_output=SHOW_CODEX_OUTPUT
 ):
@@ -87,17 +121,8 @@ def run_codex(
     env = os.environ.copy()
     env["GROQ_API_KEY"] = groq_api_key
 
-    # Read the system prompt if it exists
-    system_prompt = ""
-    if PROMPT_FILE.exists():
-        system_prompt = read_prompt_file()
-
-    # Construct the codex command using 'exec' for non-interactive mode
-    # Combine system prompt with the natural code file
-    if system_prompt:
-        full_prompt = f"{system_prompt}\n\n@{prompt_file}"
-    else:
-        full_prompt = f"@{prompt_file}"
+    # Use the prompt that was passed in (already constructed by cli_prompt)
+    full_prompt = prompt
 
     cmd = [
         "codex",
@@ -199,26 +224,18 @@ def main():
     groq_api_key = os.getenv("GROQ_API")
 
     # Validate the natural code file (but don't read it, pass it directly to codex)
-    prompt = read_natural_code_file(args.file)
+    read_natural_code_file(args.file)
 
     # Get absolute path to the prompt file
-    prompt_file = str(Path(args.file).resolve())
+    tagged_file = str(Path(args.file).resolve())
 
     # Generate log file path
     log_file = get_log_filepath(args.file)
 
     print(f"Running codex with prompt from {args.file}...")
 
-    # Read system prompt if it exists
-    system_prompt = ""
-    if PROMPT_FILE.exists():
-        system_prompt = read_prompt_file()
-
-    # Construct full prompt
-    if system_prompt:
-        full_prompt = f"{system_prompt}\n\n@{prompt_file}"
-    else:
-        full_prompt = f"@{prompt_file}"
+    # Construct full prompt using cli_prompt function
+    full_prompt = cli_prompt(tagged_file)
 
     # Run codex
     if args.wait:
@@ -231,11 +248,11 @@ def main():
             # Write header to log file
             log_handle.write("=== Codex Execution Log ===\n")
             log_handle.write(f"Timestamp: {datetime.now().isoformat()}\n")
-            log_handle.write(f"Prompt file: {prompt_file}\n")
-            if system_prompt:
+            log_handle.write(f"Prompt file: {args.file}\n")
+            if PROMPT_FILE.exists():
                 log_handle.write(f"System prompt file: {PROMPT_FILE}\n")
             log_handle.write(
-                f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}\n"
+                f"Prompt: {full_prompt[:100]}{'...' if len(full_prompt) > 100 else ''}\n"
             )
             log_handle.write(f"{'=' * 50}\n\n")
             log_handle.flush()
@@ -289,7 +306,11 @@ def main():
     else:
         # Run in background
         pid = run_codex(
-            prompt, prompt_file, groq_api_key, log_file, show_output=SHOW_CODEX_OUTPUT
+            full_prompt,
+            tagged_file,
+            groq_api_key,
+            log_file,
+            show_output=SHOW_CODEX_OUTPUT,
         )
         if SHOW_CODEX_OUTPUT:
             print(f"Codex is running in the background (PID: {pid}) - output visible")
