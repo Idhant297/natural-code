@@ -539,6 +539,8 @@ def main():
 
         # Show usage information
         console = Console()
+        console.print("v0.1.0")
+        console.print("")
         console.print("  [bold]Usage:[/bold]")
         console.print("    nrun <file.n<language>>\n")
         console.print("  [bold]Examples:[/bold]")

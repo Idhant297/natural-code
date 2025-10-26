@@ -9,3 +9,13 @@ cli-logs/*.log
 .env
 notes.md
 *.json
+
+# Python packaging
+dist/
+build/
+*.egg-info/
+*.egg
+.eggs/
+
+# uv
+.python-version
